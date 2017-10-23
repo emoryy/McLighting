@@ -240,7 +240,7 @@ void screenOff() {
   display.display();
   screenIsOff = true;
 }
-void screenOn() {
+void keepScreenOn() {
   lastPressTime = millis();
   screenIsOff = false;
 }
@@ -260,11 +260,11 @@ void handleMenu() {
     oldPosition = newPosition;
     myEnc.write(0);
     if (oldPosition == -1 || oldPosition == 1) {
-      if (screenIsOff) {
-        screenOn();
-      } else {
+      if (!screenIsOff) {
         handleRotation(oldPosition);
       }
+      keepScreenOn();
+
       needUpdate = true;
     }
   }
@@ -277,11 +277,10 @@ void handleMenu() {
       break;
     case MD_KeySwitch::KS_PRESS:
       //DBG_OUTPUT_PORT.print("\nSINGLE PRESS");
-      if (screenIsOff) {
-        screenOn();
-      } else {
+      if (!screenIsOff) {
         handleSinglePress();
       }
+      keepScreenOn();
       needUpdate = true;
       break;
     case MD_KeySwitch::KS_DPRESS:
@@ -293,8 +292,8 @@ void handleMenu() {
         //loadConfig();
         setStripSettings();
         blackOut = false;
-        updateDisplay();
-        screenOn();
+        needUpdate = true;
+        keepScreenOn();
       } else {
         strip.setMode(0);
         strip.setColor(0, 0, 0);
