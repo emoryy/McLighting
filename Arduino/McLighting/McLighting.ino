@@ -18,6 +18,8 @@
 #include <WebSockets.h>           //https://github.com/Links2004/arduinoWebSockets
 #include <WebSocketsServer.h>
 
+#include <Wire.h>
+
 // OTA
 #ifdef ENABLE_OTA
   #include <WiFiUdp.h>
@@ -32,6 +34,7 @@
   PubSubClient mqtt_client(espClient);
 #endif
 
+#include "json_config.h"
 
 // ***************************************************************************
 // Instanciate HTTP(80) / WebSockets(81) Server
@@ -70,8 +73,8 @@ Ticker ticker;
 void tick()
 {
   //toggle state
-  int state = digitalRead(BUILTIN_LED);  // get the current state of GPIO1 pin
-  digitalWrite(BUILTIN_LED, !state);     // set pin to the opposite state
+ // int state = digitalRead(BUILTIN_LED);  // get the current state of GPIO1 pin
+ // digitalWrite(BUILTIN_LED, !state);     // set pin to the opposite state
 }
 
 
@@ -85,9 +88,9 @@ String readEEPROM(int offset, int len) {
     res += char(EEPROM.read(i + offset));
     //DBG_OUTPUT_PORT.println(char(EEPROM.read(i + offset)));
   }
-  
+
   //DBG_OUTPUT_PORT.print("Read EEPROM: [");
-  //DBG_OUTPUT_PORT.print(res); 
+  //DBG_OUTPUT_PORT.print(res);
   //DBG_OUTPUT_PORT.println("]");
   return res;
 }
@@ -100,12 +103,29 @@ void writeEEPROM(int offset, int len, String value) {
     } else {
       EEPROM.write(i + offset, NULL);
     }
-    
+
     DBG_OUTPUT_PORT.print("Wrote EEPROM: ");
-    DBG_OUTPUT_PORT.println(value[i]); 
+    DBG_OUTPUT_PORT.println(value[i]);
   }
 }
 
+
+// ***************************************************************************
+// Include: Webserver
+// ***************************************************************************
+#include "spiffs_webserver.h"
+
+// ***************************************************************************
+// Include: Request handlers
+// ***************************************************************************
+#include "request_handlers.h"
+
+// ***************************************************************************
+// Include: Color modes
+// ***************************************************************************
+#include "colormodes.h"
+
+#include "menu_handler.h"
 
 // ***************************************************************************
 // Callback for WiFiManager library when config mode is entered
@@ -113,6 +133,8 @@ void writeEEPROM(int offset, int len, String value) {
 //gets called when WiFiManager enters configuration mode
 void configModeCallback (WiFiManager *myWiFiManager) {
   DBG_OUTPUT_PORT.println("Entered config mode");
+  wifiConfigMode = true;
+  updateDisplay();
   DBG_OUTPUT_PORT.println(WiFi.softAPIP());
   //if you used auto generated SSID, print it
   DBG_OUTPUT_PORT.println(myWiFiManager->getConfigPortalSSID());
@@ -133,43 +155,12 @@ void saveConfigCallback () {
 }
 
 // ***************************************************************************
-// Include: Webserver
+// WIFI functions
 // ***************************************************************************
-#include "spiffs_webserver.h"
 
-// ***************************************************************************
-// Include: Request handlers
-// ***************************************************************************
-#include "request_handlers.h"
-
-// ***************************************************************************
-// Include: Color modes
-// ***************************************************************************
-#include "colormodes.h"
-
-
-
-// ***************************************************************************
-// MAIN
-// ***************************************************************************
-void setup() {
-  DBG_OUTPUT_PORT.begin(115200);
-  EEPROM.begin(512);
-
-  // set builtin led pin as output
-  pinMode(BUILTIN_LED, OUTPUT);
+void initWIFI() {
   // start ticker with 0.5 because we start in AP mode and try to connect
   ticker.attach(0.5, tick);
-
-  // ***************************************************************************
-  // Setup: Neopixel
-  // ***************************************************************************
-  strip.init();
-  strip.setBrightness(brightness);
-  strip.setSpeed(ws2812fx_speed);
-  //strip.setMode(FX_MODE_RAINBOW_CYCLE);
-  strip.setColor(main_color.red, main_color.green, main_color.blue);
-  strip.start();
 
   // ***************************************************************************
   // Setup: WiFiManager
@@ -189,13 +180,13 @@ void setup() {
       DBG_OUTPUT_PORT.printf("MQTT user: %s\n", mqtt_user);
       DBG_OUTPUT_PORT.printf("MQTT pass: %s\n", mqtt_pass);
     }
-  
+
     WiFiManagerParameter custom_mqtt_host("host", "MQTT hostname", mqtt_host, 64);
     WiFiManagerParameter custom_mqtt_port("port", "MQTT port", mqtt_port, 6);
     WiFiManagerParameter custom_mqtt_user("user", "MQTT user", mqtt_user, 32);
     WiFiManagerParameter custom_mqtt_pass("pass", "MQTT pass", mqtt_pass, 32);
   #endif
-  
+
   //Local intialization. Once its business is done, there is no need to keep it around
   WiFiManager wifiManager;
   //reset settings - for testing
@@ -207,7 +198,7 @@ void setup() {
   #ifdef ENABLE_MQTT
     //set config save notify callback
     wifiManager.setSaveConfigCallback(saveConfigCallback);
-  
+
     //add all your parameters here
     wifiManager.addParameter(&custom_mqtt_host);
     wifiManager.addParameter(&custom_mqtt_port);
@@ -219,7 +210,7 @@ void setup() {
   //if it does not connect it starts an access point with the specified name
   //here  "AutoConnectAP"
   //and goes into a blocking loop awaiting configuration
-  if (!wifiManager.autoConnect(HOSTNAME)) {
+  if (!wifiManager.autoConnect(HOSTNAME, AP_PASSWORD)) {
     DBG_OUTPUT_PORT.println("failed to connect and hit timeout");
     //reset and try again, or maybe put it to deep sleep
     ESP.reset();
@@ -248,30 +239,30 @@ void setup() {
 
   //if you get here you have connected to the WiFi
   DBG_OUTPUT_PORT.println("connected...yeey :)");
+  wifiConfigMode = false;
   ticker.detach();
   //keep LED on
-  digitalWrite(BUILTIN_LED, LOW);
-
+  digitalWrite(LED_BUILTIN, HIGH);
 
   // ***************************************************************************
   // Configure OTA
   // ***************************************************************************
   #ifdef ENABLE_OTA
     DBG_OUTPUT_PORT.println("Arduino OTA activated.");
-    
+
     // Port defaults to 8266
     ArduinoOTA.setPort(8266);
-  
+
     // Hostname defaults to esp8266-[ChipID]
     ArduinoOTA.setHostname(HOSTNAME);
-  
+
     // No authentication by default
     // ArduinoOTA.setPassword("admin");
-  
+
     // Password can be set with it's md5 value as well
     // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
     // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
-  
+
     ArduinoOTA.onStart([]() {
       DBG_OUTPUT_PORT.println("Arduino OTA: Start updating");
     });
@@ -289,7 +280,7 @@ void setup() {
       else if (error == OTA_RECEIVE_ERROR) DBG_OUTPUT_PORT.println("Arduino OTA: Receive Failed");
       else if (error == OTA_END_ERROR) DBG_OUTPUT_PORT.println("Arduino OTA: End Failed");
     });
-  
+
     ArduinoOTA.begin();
     DBG_OUTPUT_PORT.println("");
   #endif
@@ -302,9 +293,9 @@ void setup() {
     if (mqtt_host != "" && String(mqtt_port).toInt() > 0) {
       String(String(HOSTNAME) + "/in").toCharArray(mqtt_intopic, strlen(HOSTNAME) + 4);
       String(String(HOSTNAME) + "/out").toCharArray(mqtt_outtopic, strlen(HOSTNAME) + 5);
-  
+
       DBG_OUTPUT_PORT.printf("MQTT active: %s:%d\n", mqtt_host, String(mqtt_port).toInt());
-      
+
       mqtt_client.setServer(mqtt_host, String(mqtt_port).toInt());
       mqtt_client.setCallback(mqtt_callback);
     }
@@ -325,10 +316,9 @@ void setup() {
 
   DBG_OUTPUT_PORT.print("New users: Open http://");
   DBG_OUTPUT_PORT.print(WiFi.localIP());
-  DBG_OUTPUT_PORT.println("/upload to upload the webpages first.");  
+  DBG_OUTPUT_PORT.println("/upload to upload the webpages first.");
 
   DBG_OUTPUT_PORT.println("");
-  
 
   // ***************************************************************************
   // Setup: WebSocket server
@@ -336,6 +326,25 @@ void setup() {
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
 
+  server.begin();
+  wifiStarted = true;
+}
+
+void stopWIFI() {
+  wifiStarted = false;
+  WiFi.disconnect();
+  WiFi.mode(WIFI_OFF);
+}
+
+// ***************************************************************************
+// MAIN
+// ***************************************************************************
+void setup() {
+  DBG_OUTPUT_PORT.begin(115200);
+  EEPROM.begin(512);
+
+  // set builtin led pin as output
+  pinMode(LED_BUILTIN, OUTPUT);
 
   // ***************************************************************************
   // Setup: SPIFFS
@@ -353,6 +362,23 @@ void setup() {
     SPIFFS.info(fs_info);
     DBG_OUTPUT_PORT.printf("FS Usage: %d/%d bytes\n\n", fs_info.usedBytes, fs_info.totalBytes);
   }
+
+  loadConfig();
+
+  #ifdef ENABLE_DISPLAY
+    loadWifiSettings();
+  #endif
+
+  // ***************************************************************************
+  // Setup: Neopixel
+  // ***************************************************************************
+  strip.init();
+  strip.setBrightness(brightness);
+  strip.setSpeed(ws2812fx_speed);
+
+  //strip.setMode(FX_MODE_RAINBOW_CYCLE);
+  strip.setColor(main_color.red, main_color.green, main_color.blue);
+  strip.start();
 
   // ***************************************************************************
   // Setup: SPIFFS Webserver handler
@@ -528,28 +554,42 @@ void setup() {
     getStatusJSON();
   });
 
-  server.begin();
+
+  initMenuHandler();
+  if (wifiEnabled) {
+    initWIFI();
+  } else {
+    stopWIFI();
+  }
+  DBG_OUTPUT_PORT.print("mode: ");
+  strip.setMode(ws2812fx_mode);
 }
 
 
 void loop() {
-  server.handleClient();
-  webSocket.loop();
-  
-  #ifdef ENABLE_OTA
-    ArduinoOTA.handle();
+  if (wifiStarted) {
+    server.handleClient();
+    webSocket.loop();
+    #ifdef ENABLE_OTA
+      ArduinoOTA.handle();
+    #endif
+
+    #ifdef ENABLE_MQTT
+      if (mqtt_host != "" && String(mqtt_port).toInt() > 0 && mqtt_reconnect_retries < MQTT_MAX_RECONNECT_TRIES) {
+        if (!mqtt_client.connected()) {
+          mqtt_reconnect();
+        } else {
+          mqtt_client.loop();
+        }
+      }
+    #endif
+
+  }
+
+  #ifdef ENABLE_DISPLAY
+    handleMenu();
   #endif
 
-  #ifdef ENABLE_MQTT
-    if (mqtt_host != "" && String(mqtt_port).toInt() > 0 && mqtt_reconnect_retries < MQTT_MAX_RECONNECT_TRIES) {
-      if (!mqtt_client.connected()) {
-        mqtt_reconnect(); 
-      } else {
-        mqtt_client.loop();
-      }
-    }
-  #endif
-  
   // Simple statemachine that handles the different modes
   if (mode == SET_MODE) {
     DBG_OUTPUT_PORT.printf("SET_MODE: %d %d\n", ws2812fx_mode, mode);

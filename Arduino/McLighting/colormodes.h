@@ -8,7 +8,7 @@ unsigned long currentDipTime;
 unsigned long dipStartTime;
 unsigned long currentMillis;
 int ledState = LOW;
-long previousMillis = 0; 
+long previousMillis = 0;
 int led = 5;
 int interval = 2000;
 int twitch = 50;
@@ -31,7 +31,7 @@ void hsb2rgbAN1(uint16_t index, uint8_t sat, uint8_t bright, uint8_t myled) {
 
 void updateLed (int led, int brightness) {
 	ledStates[led] = brightness;
-	
+
 	for (int i=0; i<NUMLEDS; i++)
 	{
 		uint16_t index = (i%3 == 0) ? 400 : random(0,767);
@@ -48,11 +48,11 @@ void tv() {
 		exit_func = false;
 		return;
 	}
-	
+
 	if (timeToDip == false)
 	{
 		currentMillis = millis();
-		if(currentMillis-previousMillis > interval) 
+		if(currentMillis-previousMillis > interval)
 		{
 			previousMillis = currentMillis;
 			interval = random(750,4001);//Adjusts the interval for more/less frequent random light changes
@@ -64,11 +64,11 @@ void tv() {
 			led=random(0, (strip.numPixels()-1));
 			analogLevel=random(50,255);// set the range of the 3 pwm leds
 			ledState = ledState == LOW ? HIGH: LOW; // if the LED is off turn it on and vice-versa:
-			
+
 			updateLed(led, (ledState) ? 255 : 0);
-			
+
 			if (dipCount > dipInterval)
-			{ 
+			{
 				DBG_OUTPUT_PORT.println("dip");
 				timeToDip = true;
 				dipCount = 0;
@@ -77,7 +77,7 @@ void tv() {
 				dipInterval = random(5,250);// cycles of flicker
 			}
 			//strip.show();
-		} 
+		}
 	}
 	else
 	{

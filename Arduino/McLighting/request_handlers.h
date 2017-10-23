@@ -18,7 +18,7 @@ void getArgs() {
   }
 
   ws2812fx_mode = constrain(server.arg("m").toInt(), 0, strip.getModeCount()-1);
-  
+
   main_color.red = constrain(main_color.red, 0, 255);
   main_color.green = constrain(main_color.green, 0, 255);
   main_color.blue = constrain(main_color.blue, 0, 255);
@@ -90,7 +90,7 @@ void handleSetSingleLED(uint8_t * mypayload) {
 
 void handleSetNamedMode(String str_mode) {
   exit_func = true;
-  
+
   if (str_mode.startsWith("=off")) {
     mode = OFF;
   }
@@ -119,8 +119,8 @@ void handleSetNamedMode(String str_mode) {
 
 void handleSetWS2812FXMode(uint8_t * mypayload) {
   mode = HOLD;
-  uint8_t ws2812fx_mode = (uint8_t) strtol((const char *) &mypayload[1], NULL, 10);
-  ws2812fx_mode = constrain(ws2812fx_mode, 0, 255);
+  uint8_t modebyte = (uint8_t) strtol((const char *) &mypayload[1], NULL, 10);
+  ws2812fx_mode = constrain(modebyte, 0, 255);
   strip.setColor(main_color.red, main_color.green, main_color.blue);
   strip.setMode(ws2812fx_mode);
   strip.start();
@@ -132,8 +132,12 @@ char* listStatusJSON() {
   char modeName[30];
   strncpy_P(modeName, (PGM_P)strip.getModeName(strip.getMode()), sizeof(modeName)); // copy from progmem
 
-  snprintf(json, sizeof(json), "{\"mode\":%d, \"ws2812fx_mode\":%d, \"ws2812fx_mode_name\":\"%s\", \"speed\":%d, \"brightness\":%d, \"color\":[%d, %d, %d]}",
-    mode, strip.getMode(), modeName, ws2812fx_speed, brightness, main_color.red, main_color.green, main_color.blue);
+  snprintf(
+    json,
+    sizeof(json),
+    "{\"mode\":%d, \"ws2812fx_mode\":%d, \"ws2812fx_mode_name\":\"%s\", \"speed\":%d, \"brightness\":%d, \"color\":[%d, %d, %d]}",
+    mode, strip.getMode(), modeName, ws2812fx_speed, brightness, main_color.red, main_color.green, main_color.blue
+  );
   return json;
 }
 
@@ -300,21 +304,21 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
       // $ ==> Get status Info.
       if (payload[0] == '$') {
         DBG_OUTPUT_PORT.printf("Get status info.");
-        
+
         String json = listStatusJSON();
         DBG_OUTPUT_PORT.println(json);
         webSocket.sendTXT(num, json);
       }
-      
+
       // ~ ==> Get WS2812 modes.
       if (payload[0] == '~') {
         DBG_OUTPUT_PORT.printf("Get WS2812 modes.");
-        
+
         String json = listModesJSON();
         DBG_OUTPUT_PORT.println(json);
         webSocket.sendTXT(num, json);
       }
-      
+
       // / ==> Set WS2812 mode.
       if (payload[0] == '/') {
         handleSetWS2812FXMode(payload);
@@ -332,6 +336,23 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
         handleAutoStop();
         webSocket.sendTXT(num, "OK");
       }
+
+      if (payload[0] == 'S') {
+        DBG_OUTPUT_PORT.println("Save settings");
+        saveConfig();
+        webSocket.sendTXT(num, "OK");
+      }
+
+      if (payload[0] == 'L') {
+        DBG_OUTPUT_PORT.println("Load settings");
+        loadConfig();
+        strip.setMode(ws2812fx_mode);
+        strip.setColor(main_color.red, main_color.green, main_color.blue);
+        strip.setSpeed(ws2812fx_speed);
+        strip.setBrightness(brightness);
+        webSocket.sendTXT(num, "OK");
+      }
+
       break;
   }
 }
@@ -390,7 +411,7 @@ void checkForRequests() {
       DBG_OUTPUT_PORT.printf("MQTT: Set single LED in given color [%s]\n", payload);
       mqtt_client.publish(mqtt_outtopic, String(String("OK ") + String((char *)payload)).c_str());
     }
-    
+
     // = ==> Activate named mode
     if (payload[0] == '=') {
       String str_mode = String((char *) &payload[0]);
@@ -414,11 +435,11 @@ void checkForRequests() {
       mqtt_client.publish(mqtt_outtopic, "ERROR: Not implemented. Message too large for pubsubclient.");
       //String json_modes = listModesJSON();
       //DBG_OUTPUT_PORT.printf(json_modes.c_str());
-      
+
       //int res = mqtt_client.publish(mqtt_outtopic, json_modes.c_str(), json_modes.length());
       //DBG_OUTPUT_PORT.printf("Result: %d / %d", res, json_modes.length());
     }
-    
+
     // / ==> Set WS2812 mode.
     if (payload[0] == '/') {
       handleSetWS2812FXMode(payload);
@@ -428,7 +449,7 @@ void checkForRequests() {
 
     free(payload);
   }
-  
+
   void mqtt_reconnect() {
     // Loop until we're reconnected
     while (!mqtt_client.connected() && mqtt_reconnect_retries < MQTT_MAX_RECONNECT_TRIES) {
@@ -458,5 +479,5 @@ void checkForRequests() {
     if (mqtt_reconnect_retries >= MQTT_MAX_RECONNECT_TRIES) {
       DBG_OUTPUT_PORT.printf("MQTT connection failed, giving up after %d tries ...\n", mqtt_reconnect_retries);
     }
-  }  
+  }
 #endif

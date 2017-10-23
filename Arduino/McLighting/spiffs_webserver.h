@@ -82,7 +82,7 @@ void handleFileUpload() {
 	if (upload.status == UPLOAD_FILE_START) {
 		String filename = upload.filename;
 		if (!filename.startsWith("/")) filename = "/" + filename;
-		DBG_OUTPUT_PORT.print("handleFileUpload Name: "); 
+		DBG_OUTPUT_PORT.print("handleFileUpload Name: ");
 		DBG_OUTPUT_PORT.println(filename);
 		fsUploadFile = SPIFFS.open(filename, "w");
 		filename = String();
@@ -133,12 +133,12 @@ void handleFileList() {
 		server.send(500, "text/plain", "BAD ARGS");
 		return;
 	}
-	
+
 	String path = server.arg("dir");
 	DBG_OUTPUT_PORT.println("handleFileList: " + path);
 	Dir dir = SPIFFS.openDir(path);
 	path = String();
-	
+
 	String output = "[";
 	while (dir.next()) {
 		File entry = dir.openFile("r");
@@ -151,7 +151,7 @@ void handleFileList() {
 		output += "\"}";
 		entry.close();
 	}
-	
+
 	output += "]";
 	server.send(200, "text/json", output);
 }
